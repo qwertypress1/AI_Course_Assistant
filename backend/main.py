@@ -15,9 +15,14 @@ app = FastAPI(
 )
 
 # CORS — allow frontend origins
+allowed_origins = [o.strip().rstrip('/') for o in settings.cors_origins.split(",") if o.strip()]
+if "https://ai-course-assistant-architecture.vercel.app" not in allowed_origins:
+    allowed_origins.append("https://ai-course-assistant-architecture.vercel.app")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins.split(","),
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
