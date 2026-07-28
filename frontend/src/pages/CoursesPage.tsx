@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { courseApi } from '../services/api';
-import { BookOpen, Plus, FileText, MessageSquareText, Shield, AlertCircle, X, Search, ArrowUpRight } from 'lucide-react';
+import { BookOpen, Plus, FileText, AlertCircle, X, Search, ArrowUpRight } from 'lucide-react';
 
 export const CoursesPage: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [courses, setCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -14,7 +15,6 @@ export const CoursesPage: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -39,12 +39,13 @@ export const CoursesPage: React.FC = () => {
     setSubmitting(true);
 
     try {
-      await courseApi.create({ name, code, description });
+      const created = await courseApi.create({ name, code });
       setShowCreateModal(false);
       setCode('');
       setName('');
-      setDescription('');
       fetchCourses();
+      // Directly navigate user to upload documents for this new course
+      navigate(`/documents?course_id=${created.id}`);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to create course');
     } finally {
@@ -110,9 +111,6 @@ export const CoursesPage: React.FC = () => {
                 <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors leading-snug">
                   {course.name}
                 </h3>
-                <p className="text-xs text-slate-400 mt-2 line-clamp-2">
-                  {course.description || 'No description available for this course workspace.'}
-                </p>
               </div>
 
               <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between">
@@ -163,13 +161,13 @@ export const CoursesPage: React.FC = () => {
                   required
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  placeholder="CS101"
+                  placeholder="CSC 410"
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Course Name</label>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Course Title</label>
                 <input
                   type="text"
                   required
@@ -177,17 +175,6 @@ export const CoursesPage: React.FC = () => {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Introduction to Computer Science"
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Description</label>
-                <textarea
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Course outline and syllabus summary..."
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 resize-none"
                 />
               </div>
 

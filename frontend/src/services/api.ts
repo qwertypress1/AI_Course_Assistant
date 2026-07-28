@@ -1,6 +1,11 @@
 import axios from 'axios';
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+let rawBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+rawBaseUrl = rawBaseUrl.replace(/\/+$/, '');
+if (!rawBaseUrl.endsWith('/api/v1')) {
+  rawBaseUrl = `${rawBaseUrl}/api/v1`;
+}
+export const API_BASE_URL = rawBaseUrl;
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -81,9 +86,7 @@ export const documentApi = {
     const formData = new FormData();
     formData.append('course_id', courseId);
     formData.append('file', file);
-    const res = await api.post('/documents/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const res = await api.post('/documents/upload', formData);
     return res.data;
   },
   list: async (courseId: string) => {

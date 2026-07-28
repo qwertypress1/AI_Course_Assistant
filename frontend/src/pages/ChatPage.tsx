@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { courseApi, chatApi } from '../services/api';
+import { courseApi, chatApi, API_BASE_URL } from '../services/api';
 import { MessageSquareText, Plus, Send, Sparkles, BookOpen, FileText, Trash2, ChevronRight, User, AlertCircle } from 'lucide-react';
 
 interface Source {
@@ -151,7 +151,7 @@ export const ChatPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:8000/api/v1/chat/sessions/${activeSid}/messages`, {
+      const response = await fetch(`${API_BASE_URL}/chat/sessions/${activeSid}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -209,7 +209,11 @@ export const ChatPage: React.FC = () => {
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Error generating streaming answer.');
+      if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
+        setError('Failed to connect to backend server. Please make sure your FastAPI backend server is running (http://localhost:8000).');
+      } else {
+        setError(err.message || 'Error generating streaming answer.');
+      }
       setIsStreaming(false);
     }
   };

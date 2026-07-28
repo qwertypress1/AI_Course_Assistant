@@ -3000,7 +3000,7 @@ class CreateCourseRequest(BaseModel):
     @classmethod
     def validate_name(cls, v):
         if len(v.strip()) < 3 or len(v.strip()) > 255:
-            raise ValueError("Course name must be 3-255 characters")
+            raise ValueError("Course title must be 3-255 characters")
         return v.strip()
 
     @field_validator("code")

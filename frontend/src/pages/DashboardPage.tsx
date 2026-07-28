@@ -142,9 +142,6 @@ export const DashboardPage: React.FC = () => {
                   <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors leading-snug">
                     {course.name}
                   </h3>
-                  <p className="text-xs text-slate-400 mt-2 line-clamp-2">
-                    {course.description || 'No description provided for this course workspace.'}
-                  </p>
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between">

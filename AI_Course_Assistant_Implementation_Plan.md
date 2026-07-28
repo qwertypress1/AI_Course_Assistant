@@ -1041,7 +1041,7 @@ Create `src/components/Layout/Layout.js`:
 
 Create `src/pages/DashboardPage.js`:
 - Fetch courses from `GET /courses`
-- Display as a grid of cards: course name, code, document count, enrollment count
+- Display as a grid of cards: course title, code, document count, enrollment count
 - Click card → navigate to `/courses/:id`
 - For lecturers: "Create Course" button
 - For admins: link to Admin Panel
