@@ -255,6 +255,11 @@ export const DocumentsPage: React.FC = () => {
                         <div className="text-[11px] text-slate-500 mt-0.5">
                           Uploaded {new Date(doc.created_at).toLocaleDateString()}
                         </div>
+                        {doc.error_message && (
+                          <div className="text-[11px] text-rose-400 mt-1 max-w-xs font-sans leading-tight">
+                            {doc.error_message}
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 font-mono text-xs">{formatBytes(doc.file_size_bytes)}</td>

@@ -22,7 +22,7 @@ if sys.platform == "win32":
 settings = get_settings()
 
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB
-MAX_PAGE_COUNT = 50
+MAX_PAGE_COUNT = 250
 
 
 class DocumentProcessingService:
@@ -89,12 +89,16 @@ class DocumentProcessingService:
                     raise ValueError("Document produced no text chunks after processing")
                 doc.chunk_count = len(chunks)
 
-                # Stage 6: Embedding (if OpenAI key is configured)
+                # Stage 6 & 7: Embedding & Pinecone (if OpenAI key is configured)
                 if self.openai_client:
-                    embedded_chunks = self._embed_chunks(chunks)
-                    # Stage 7: Pinecone Upsert
-                    if self.pinecone_index:
-                        self._upsert_to_pinecone(embedded_chunks, str(doc.course_id), str(doc.id))
+                    try:
+                        embedded_chunks = self._embed_chunks(chunks)
+                        if self.pinecone_index:
+                            self._upsert_to_pinecone(embedded_chunks, str(doc.course_id), str(doc.id))
+                    except Exception as embed_err:
+                        # Log embedding warning without failing text extraction
+                        print(f"[Warning] Embedding/Vector indexing error: {embed_err}")
+                        doc.error_message = f"Text extracted, but vector indexing warning: {str(embed_err)[:300]}"
 
                 # Success — mark ready
                 doc.status = DocumentStatus.ready
