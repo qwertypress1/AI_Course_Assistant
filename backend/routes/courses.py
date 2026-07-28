@@ -9,6 +9,7 @@ from middleware.auth import get_current_user, require_role
 from services.course_service import (
     get_course_by_id,
     list_courses as get_all_courses,
+    list_available_courses,
     create_course as create_new_course,
     enroll_user,
     is_user_enrolled,
@@ -53,6 +54,14 @@ async def list_courses(
     db: Session = Depends(get_db)
 ):
     return get_all_courses(db, current_user)
+
+
+@router.get("/available", response_model=List[CourseResponse])
+async def get_available_courses(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return list_available_courses(db, current_user)
 
 
 @router.get("/{course_id}", response_model=CourseResponse)

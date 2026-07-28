@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import sys
@@ -12,7 +13,7 @@ from pinecone import Pinecone
 
 from config import get_settings
 from db import get_db
-from models import Document, DocumentStatus, UsageLog
+from models import Document, DocumentStatus, DocumentChunk, UsageLog
 from services.storage_service import storage_service
 
 # On Windows, set the Tesseract executable path explicitly
@@ -89,16 +90,42 @@ class DocumentProcessingService:
                     raise ValueError("Document produced no text chunks after processing")
                 doc.chunk_count = len(chunks)
 
-                # Stage 6 & 7: Embedding & Pinecone (if OpenAI key is configured)
+                # Clear old DB chunks if re-processing
+                db.query(DocumentChunk).filter(DocumentChunk.document_id == doc.id).delete()
+
+                # Stage 6 & 7: Embedding & DB / Pinecone storage
                 if self.openai_client:
                     try:
                         embedded_chunks = self._embed_chunks(chunks)
+                        for c in embedded_chunks:
+                            chunk_rec = DocumentChunk(
+                                document_id=doc.id,
+                                course_id=doc.course_id,
+                                chunk_index=c["chunk_index"],
+                                page_number=c["page_number"],
+                                text=c["text"],
+                                embedding=json.dumps(c.get("embedding", []))
+                            )
+                            db.add(chunk_rec)
+                        db.commit()
+
                         if self.pinecone_index:
                             self._upsert_to_pinecone(embedded_chunks, str(doc.course_id), str(doc.id))
                     except Exception as embed_err:
-                        # Log embedding warning without failing text extraction
                         print(f"[Warning] Embedding/Vector indexing error: {embed_err}")
                         doc.error_message = f"Text extracted, but vector indexing warning: {str(embed_err)[:300]}"
+                else:
+                    for c in chunks:
+                        chunk_rec = DocumentChunk(
+                            document_id=doc.id,
+                            course_id=doc.course_id,
+                            chunk_index=c["chunk_index"],
+                            page_number=c["page_number"],
+                            text=c["text"],
+                            embedding=None
+                        )
+                        db.add(chunk_rec)
+                    db.commit()
 
                 # Success — mark ready
                 doc.status = DocumentStatus.ready

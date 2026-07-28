@@ -63,6 +63,10 @@ export const courseApi = {
     const res = await api.get('/courses');
     return res.data;
   },
+  listAvailable: async () => {
+    const res = await api.get('/courses/available');
+    return res.data;
+  },
   create: async (data: { name: string; code: string; description?: string }) => {
     const res = await api.post('/courses', data);
     return res.data;

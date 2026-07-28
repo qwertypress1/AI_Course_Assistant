@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { courseApi } from '../services/api';
 import { BookOpen, FileText, MessageSquareText, Plus, Sparkles, ArrowUpRight, GraduationCap } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [courses, setCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,18 +44,18 @@ export const DashboardPage: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-3">
             <Link
-              to="/chat"
+              to="/courses?onboarding=true"
               className="px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2 text-sm hover:scale-[1.02]"
             >
-              <MessageSquareText className="w-4 h-4" />
-              <span>Start AI Chat</span>
+              <Plus className="w-4 h-4" />
+              <span>Enroll / Join Course</span>
             </Link>
             <Link
-              to="/documents"
+              to="/chat"
               className="px-5 py-3 rounded-2xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700 font-medium transition-all flex items-center gap-2 text-sm"
             >
-              <FileText className="w-4 h-4 text-indigo-400" />
-              <span>Upload Document</span>
+              <MessageSquareText className="w-4 h-4 text-indigo-400" />
+              <span>Start AI Chat</span>
             </Link>
           </div>
         </div>
@@ -113,31 +114,36 @@ export const DashboardPage: React.FC = () => {
         {loading ? (
           <div className="text-center py-12 text-slate-400 text-sm">Loading courses...</div>
         ) : courses.length === 0 ? (
-          <div className="glass-card rounded-2xl p-8 text-center border border-dashed border-slate-800">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto mb-3">
+          <div className="glass-card rounded-2xl p-8 text-center border border-dashed border-indigo-500/40 bg-indigo-950/20">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center mx-auto mb-3">
               <BookOpen className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-semibold text-white">No courses enrolled yet</h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-              Join or create your course workspace to upload lecture notes and start asking questions.
+            <h3 className="text-lg font-bold text-white">Enroll in your first course</h3>
+            <p className="text-xs text-slate-300 mt-1 max-w-md mx-auto">
+              Join an existing course workspace or create your own to start uploading course materials and asking AI questions.
             </p>
             <Link
-              to="/courses"
-              className="inline-flex items-center gap-2 px-4 py-2 mt-4 rounded-xl bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-500 transition-all"
+              to="/courses?onboarding=true"
+              className="inline-flex items-center gap-2 px-5 py-2.5 mt-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02]"
             >
-              <Plus className="w-4 h-4" /> Enroll in Course
+              <Plus className="w-4 h-4" /> Enroll in Course Now
             </Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {courses.map((course) => (
-              <div key={course.id} className="glass-card rounded-2xl p-6 border border-slate-800 flex flex-col justify-between group">
+              <div
+                key={course.id}
+                onClick={() => navigate(`/chat?course_id=${course.id}`)}
+                className="glass-card rounded-2xl p-6 border border-slate-800 flex flex-col justify-between group cursor-pointer hover:border-indigo-500/50 hover:shadow-xl hover:shadow-indigo-500/10 transition-all hover:-translate-y-0.5"
+                title={`Click to open AI Chat for ${course.code}`}
+              >
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <span className="px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-bold font-mono">
                       {course.code}
                     </span>
-                    <span className="text-[11px] text-slate-400">Active</span>
+                    <span className="text-[11px] text-emerald-400 font-medium bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">Enrolled</span>
                   </div>
                   <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors leading-snug">
                     {course.name}
@@ -145,18 +151,24 @@ export const DashboardPage: React.FC = () => {
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between">
-                  <Link
-                    to={`/documents?course_id=${course.id}`}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/documents?course_id=${course.id}`);
+                    }}
                     className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors"
                   >
                     <FileText className="w-3.5 h-3.5 text-indigo-400" /> Docs
-                  </Link>
-                  <Link
-                    to={`/chat?course_id=${course.id}`}
-                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/chat?course_id=${course.id}`);
+                    }}
+                    className="text-xs font-semibold text-indigo-400 group-hover:text-indigo-300 flex items-center gap-1 transition-colors"
                   >
                     Ask AI <ArrowUpRight className="w-3.5 h-3.5" />
-                  </Link>
+                  </button>
                 </div>
               </div>
             ))}

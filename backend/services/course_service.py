@@ -45,6 +45,20 @@ def list_courses(db: Session, current_user: User) -> List[Course]:
     ).all()
 
 
+def list_available_courses(db: Session, current_user: User) -> List[Course]:
+    """List all public active courses that the student is NOT currently enrolled in."""
+    enrolled_course_ids = (
+        db.query(CourseEnrollment.course_id)
+        .filter(CourseEnrollment.user_id == current_user.id)
+        .subquery()
+    )
+    return db.query(Course).filter(
+        Course.is_active == True,
+        ~Course.id.in_(enrolled_course_ids),
+        Course.created_by != current_user.id
+    ).all()
+
+
 def get_course_by_id(db: Session, course_id: UUID) -> Optional[Course]:
     return db.query(Course).filter(Course.id == course_id, Course.is_active == True).first()
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { courseApi } from '../services/api';
 import { Sparkles, Mail, Lock, AlertCircle, ArrowRight, Eye, EyeOff } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -20,6 +21,16 @@ export const LoginPage: React.FC = () => {
 
     try {
       await login({ email, password });
+      // Enroll in course should be the first thing a student does after signing in
+      try {
+        const enrolled = await courseApi.list();
+        if (enrolled.length === 0) {
+          navigate('/courses?onboarding=true');
+          return;
+        }
+      } catch (_) {
+        // Fallback
+      }
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to sign in. Please check your credentials.');

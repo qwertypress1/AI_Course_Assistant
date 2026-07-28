@@ -1,4 +1,5 @@
 import json
+import math
 import time
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from uuid import UUID
@@ -6,7 +7,7 @@ from sqlalchemy.orm import Session
 from openai import OpenAI
 
 from config import get_settings
-from models import ChatSession, ChatMessage, UsageLog
+from models import ChatSession, ChatMessage, Document, DocumentChunk, UsageLog
 from services.pinecone_service import pinecone_service
 
 settings = get_settings()
@@ -104,14 +105,24 @@ class ChatService:
         # Step 2: Retrieve Recent Chat History
         history = self.get_messages(db, session.id, limit=10)
 
-        # Step 3: Embed Question & Query Pinecone
+        # Step 3: Embed Question & Query Vector DB / Pinecone
         question_embedding = self.embed_question(user_message)
         chunks = pinecone_service.query(
             embedding=question_embedding,
             namespace=str(session.course_id),
             top_k=5,
-            similarity_threshold=0.7
+            similarity_threshold=0.6
         )
+
+        # Fallback to Database Vector Store if Pinecone returns no results
+        if not chunks:
+            chunks = self._query_db_vector_store(
+                db=db,
+                course_id=session.course_id,
+                question_embedding=question_embedding,
+                user_message=user_message,
+                top_k=5
+            )
 
         sources = []
         for chunk in chunks:
@@ -214,6 +225,80 @@ class ChatService:
 
         yield f'data: {json.dumps({"type": "sources", "sources": sources})}\n\n'
         yield f'data: {json.dumps({"type": "done", "message_id": str(assistant_msg.id)})}\n\n'
+
+    def _query_db_vector_store(
+        self,
+        db: Session,
+        course_id: UUID,
+        question_embedding: List[float],
+        user_message: str,
+        top_k: int = 5
+    ) -> List[Dict[str, Any]]:
+        db_chunks = (
+            db.query(DocumentChunk, Document.filename)
+            .join(Document, DocumentChunk.document_id == Document.id)
+            .filter(DocumentChunk.course_id == course_id)
+            .all()
+        )
+
+        if not db_chunks:
+            return []
+
+        scored_chunks = []
+        has_embeddings = any(c[0].embedding is not None for c in db_chunks)
+
+        if has_embeddings and any(x != 0.0 for x in question_embedding):
+            for chunk_rec, filename in db_chunks:
+                if not chunk_rec.embedding:
+                    continue
+                try:
+                    vec = json.loads(chunk_rec.embedding)
+                    score = self._cosine_similarity(question_embedding, vec)
+                    scored_chunks.append({
+                        "id": str(chunk_rec.id),
+                        "score": score,
+                        "metadata": {
+                            "document_id": str(chunk_rec.document_id),
+                            "filename": filename,
+                            "page_number": chunk_rec.page_number,
+                            "chunk_index": chunk_rec.chunk_index,
+                            "text_preview": chunk_rec.text,
+                        }
+                    })
+                except Exception:
+                    pass
+
+            scored_chunks.sort(key=lambda x: x["score"], reverse=True)
+            return [c for c in scored_chunks[:top_k] if c["score"] >= 0.20]
+        else:
+            query_words = set(user_message.lower().split())
+            for chunk_rec, filename in db_chunks:
+                text_lower = chunk_rec.text.lower()
+                matches = sum(1 for w in query_words if len(w) > 3 and w in text_lower)
+                score = matches / max(1, len(query_words))
+                scored_chunks.append({
+                    "id": str(chunk_rec.id),
+                    "score": score,
+                    "metadata": {
+                        "document_id": str(chunk_rec.document_id),
+                        "filename": filename,
+                        "page_number": chunk_rec.page_number,
+                        "chunk_index": chunk_rec.chunk_index,
+                        "text_preview": chunk_rec.text,
+                    }
+                })
+            scored_chunks.sort(key=lambda x: x["score"], reverse=True)
+            return scored_chunks[:top_k]
+
+    def _cosine_similarity(self, vec_a: List[float], vec_b: List[float]) -> float:
+        if not vec_a or not vec_b or len(vec_a) != len(vec_b):
+            return 0.0
+        dot_product = sum(a * b for a, b in zip(vec_a, vec_b))
+        norm_a = math.sqrt(sum(a * a for a in vec_a))
+        norm_b = math.sqrt(sum(b * b for b in vec_b))
+        if norm_a == 0.0 or norm_b == 0.0:
+            return 0.0
+        return dot_product / (norm_a * norm_b)
 
 
 chat_service = ChatService()

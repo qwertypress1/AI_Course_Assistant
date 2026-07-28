@@ -21,7 +21,7 @@ export const RegisterPage: React.FC = () => {
 
     try {
       await register({ full_name: fullName, email, password });
-      navigate('/');
+      navigate('/courses?onboarding=true');
     } catch (err: any) {
       const detail = err.response?.data?.detail;
       if (Array.isArray(detail)) {
