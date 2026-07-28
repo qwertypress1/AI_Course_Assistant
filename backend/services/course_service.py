@@ -69,6 +69,9 @@ def enroll_user(db: Session, course_id: UUID, user_id: UUID, role: str = "studen
 
 
 def is_user_enrolled(db: Session, course_id: UUID, user_id: UUID) -> bool:
+    course = get_course_by_id(db, course_id)
+    if course and course.created_by == user_id:
+        return True
     count = db.query(CourseEnrollment).filter(
         CourseEnrollment.course_id == course_id,
         CourseEnrollment.user_id == user_id

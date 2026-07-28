@@ -6,14 +6,7 @@ from db import get_db
 from models import User, UserRole
 from schemas.document import DocumentUploadResponse, DocumentStatusResponse, DocumentListResponse
 from middleware.auth import get_current_user
-from services.document_service import (
-    ALLOWED_MIME_TYPES,
-    MAX_FILE_SIZE,
-    create_document_record,
-    list_documents,
-    get_document,
-    delete_document,
-)
+import services.document_service as doc_service
 from services.course_service import get_course_by_id, is_user_enrolled
 from services.document_processing import document_processing_service
 
@@ -40,7 +33,7 @@ async def upload_document(
 
     # MIME type check
     mime_type = file.content_type or "application/octet-stream"
-    if mime_type not in ALLOWED_MIME_TYPES:
+    if mime_type not in doc_service.ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail=f"Unsupported file type '{mime_type}'. Allowed types: PDF, PNG, JPEG, TIFF"
@@ -49,13 +42,13 @@ async def upload_document(
     # Read bytes and size check
     file_bytes = await file.read()
     file_size = len(file_bytes)
-    if file_size > MAX_FILE_SIZE:
+    if file_size > doc_service.MAX_FILE_SIZE:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"File size ({file_size} bytes) exceeds maximum limit of 10MB"
         )
 
-    doc = create_document_record(
+    doc = doc_service.create_document_record(
         db=db,
         course_id=course_id,
         uploaded_by=current_user.id,
@@ -80,7 +73,7 @@ async def list_documents(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    return list_documents(db, course_id, current_user)
+    return doc_service.list_documents(db, course_id, current_user)
 
 
 @router.get("/{document_id}/status", response_model=DocumentStatusResponse)
@@ -89,7 +82,7 @@ async def get_document_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    doc = get_document(db, document_id)
+    doc = doc_service.get_document(db, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
         
@@ -105,12 +98,12 @@ async def delete_document(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    doc = get_document(db, document_id)
+    doc = doc_service.get_document(db, document_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
     if current_user.role == UserRole.student and doc.uploaded_by != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    delete_document(db, doc)
+    doc_service.delete_document(db, doc)
     return {"message": "Document deleted successfully"}

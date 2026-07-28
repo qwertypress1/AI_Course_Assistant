@@ -19,11 +19,11 @@ class CreateCourseRequest(BaseModel):
     @classmethod
     def code_valid(cls, v: str) -> str:
         import re
-        v = v.strip().upper()
+        v = re.sub(r"\s+", " ", v.strip().upper())
         if len(v) < 2 or len(v) > 50:
             raise ValueError("Course code must be 2–50 characters")
-        if not re.match(r"^[A-Z0-9]+$", v):
-            raise ValueError("Course code must be uppercase alphanumeric only")
+        if not re.match(r"^[A-Z0-9 _-]+$", v):
+            raise ValueError("Course code must contain letters, numbers, spaces, or hyphens")
         return v
 
 
