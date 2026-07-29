@@ -137,24 +137,31 @@ class ChatService:
         # Yield Initial Event
         yield f'data: {json.dumps({"type": "start", "session_id": str(session.id)})}\n\n'
 
-        # Step 4: If no OpenAI client or no relevant context found, yield fallback
-        if not self.openai_client or not chunks:
+        # Check if user message is a conversational greeting
+        clean_msg = user_message.strip().lower().rstrip('!?.,')
+        greetings = {'hi', 'hello', 'hey', 'hello what sup', 'whats up', 'what sup', 'good morning', 'good afternoon', 'good evening', 'who are you', 'help', 'yo'}
+        is_greeting = clean_msg in greetings
+
+        # Step 4: Handle cases with no OpenAI client or no chunks
+        if not self.openai_client:
+            fallback = "OpenAI API key is not configured on the server. Please contact system administrator."
+            assistant_msg = ChatMessage(session_id=session.id, role="assistant", content=fallback, sources=[], tokens_used=0, model_used="fallback")
+            db.add(assistant_msg)
+            db.commit()
+            yield f'data: {json.dumps({"type": "chunk", "content": fallback})}\n\n'
+            yield f'data: {json.dumps({"type": "sources", "sources": []})}\n\n'
+            yield f'data: {json.dumps({"type": "done", "message_id": str(assistant_msg.id)})}\n\n'
+            return
+
+        if not chunks and not is_greeting:
             fallback = (
                 "I don't have relevant information in your uploaded documents "
                 "to answer this question. Please try rephrasing your question "
                 "or upload course documents covering this topic."
             )
-            assistant_msg = ChatMessage(
-                session_id=session.id,
-                role="assistant",
-                content=fallback,
-                sources=[],
-                tokens_used=0,
-                model_used="fallback"
-            )
+            assistant_msg = ChatMessage(session_id=session.id, role="assistant", content=fallback, sources=[], tokens_used=0, model_used="fallback")
             db.add(assistant_msg)
             db.commit()
-
             yield f'data: {json.dumps({"type": "chunk", "content": fallback})}\n\n'
             yield f'data: {json.dumps({"type": "sources", "sources": []})}\n\n'
             yield f'data: {json.dumps({"type": "done", "message_id": str(assistant_msg.id)})}\n\n'

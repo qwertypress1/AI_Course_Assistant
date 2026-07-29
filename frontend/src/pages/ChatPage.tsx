@@ -168,28 +168,34 @@ export const ChatPage: React.FC = () => {
       const decoder = new TextDecoder();
       let accumulatedText = '';
       let accumulatedSources: Source[] = [];
+      let buffer = '';
 
       if (reader) {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunkStr = decoder.decode(value, { stream: true });
-          const lines = chunkStr.split('\n\n');
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || ''; // keep incomplete trailing fragment in buffer
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
+          for (const rawEvent of events) {
+            const trimmed = rawEvent.trim();
+            if (!trimmed) continue;
+
+            const dataIndex = trimmed.indexOf('data:');
+            if (dataIndex !== -1) {
+              const jsonStr = trimmed.substring(dataIndex + 5).trim();
               try {
-                const eventData = JSON.parse(line.replace('data: ', '').trim());
+                const eventData = JSON.parse(jsonStr);
 
                 if (eventData.type === 'chunk') {
-                  accumulatedText += eventData.content;
+                  accumulatedText += eventData.content || '';
                   setStreamingText(accumulatedText);
                 } else if (eventData.type === 'sources') {
                   accumulatedSources = eventData.sources || [];
                   setStreamingSources(accumulatedSources);
                 } else if (eventData.type === 'done') {
-                  // Finalize assistant message
                   const finalAssistantMsg: Message = {
                     id: eventData.message_id || `msg-${Date.now()}`,
                     role: 'assistant',
@@ -202,10 +208,29 @@ export const ChatPage: React.FC = () => {
                   setIsStreaming(false);
                 }
               } catch (e) {
-                // Ignore parse errors on partial chunks
+                console.error('SSE parse error:', e, jsonStr);
               }
             }
           }
+        }
+
+        // Finalize if stream ended but done event wasn't explicitly caught
+        if (accumulatedText.trim()) {
+          const finalAssistantMsg: Message = {
+            id: `msg-${Date.now()}`,
+            role: 'assistant',
+            content: accumulatedText,
+            sources: accumulatedSources,
+          };
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === finalAssistantMsg.id || (m.role === 'assistant' && m.content === accumulatedText))) {
+              return prev;
+            }
+            return [...prev, finalAssistantMsg];
+          });
+          setStreamingText('');
+          setStreamingSources([]);
+          setIsStreaming(false);
         }
       }
     } catch (err: any) {
