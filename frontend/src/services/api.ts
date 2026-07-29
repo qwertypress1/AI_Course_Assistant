@@ -91,6 +91,9 @@ export const courseApi = {
 // Document API
 export const documentApi = {
   upload: async (courseId: string, file: File) => {
+    if (!courseId || courseId.trim() === '') {
+      throw new Error('No course selected. Please select a course workspace before uploading.');
+    }
     const formData = new FormData();
     formData.append('course_id', courseId);
     formData.append('file', file);

@@ -49,9 +49,10 @@ export const CoursesPage: React.FC = () => {
       await courseApi.enroll(courseId, 'student');
       await fetchCourses();
       // Navigate to chat for the newly enrolled course
-      navigate(`/chat?course_id=${courseId}`);
     } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to enroll in course');
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map((d: any) => d.msg || 'Error').join('; ') : 'Failed to enroll in course';
+      alert(msg);
     } finally {
       setEnrollingId(null);
     }
@@ -71,7 +72,9 @@ export const CoursesPage: React.FC = () => {
       // Directly navigate user to upload documents for this new course
       navigate(`/documents?course_id=${created.id}`);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create course');
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map((d: any) => d.msg || 'Error').join('; ') : 'Failed to create course';
+      setError(msg);
     } finally {
       setSubmitting(false);
     }

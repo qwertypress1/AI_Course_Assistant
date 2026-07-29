@@ -56,11 +56,29 @@ export const DocumentsPage: React.FC = () => {
     fetchDocuments();
   }, [selectedCourseId]);
 
+  const formatApiError = (err: any, defaultMsg: string = 'Failed to upload document.'): string => {
+    const detail = err?.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      return detail.map((d: any) => (typeof d === 'string' ? d : d.msg || 'Validation error')).join('; ');
+    }
+    if (detail && typeof detail === 'object') {
+      return detail.msg || JSON.stringify(detail);
+    }
+    return err?.message || defaultMsg;
+  };
+
   // Handle File Upload
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
-      if (!selectedCourseId) {
-        setError('Please select a course before uploading files.');
+      let targetCourseId = selectedCourseId;
+      if (!targetCourseId && courses.length > 0) {
+        targetCourseId = courses[0].id;
+        setSelectedCourseId(targetCourseId);
+      }
+
+      if (!targetCourseId) {
+        setError('Please select or enroll in a course before uploading document files.');
         return;
       }
 
@@ -77,15 +95,15 @@ export const DocumentsPage: React.FC = () => {
       setUploading(true);
 
       try {
-        await documentApi.upload(selectedCourseId, file);
+        await documentApi.upload(targetCourseId, file);
         await fetchDocuments();
       } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to upload document.');
+        setError(formatApiError(err, 'Failed to upload document.'));
       } finally {
         setUploading(false);
       }
     },
-    [selectedCourseId]
+    [selectedCourseId, courses]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
