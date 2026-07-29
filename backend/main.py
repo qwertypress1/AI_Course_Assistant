@@ -5,6 +5,8 @@ from routes.auth import router as auth_router
 from routes.courses import router as courses_router
 from routes.documents import router as documents_router
 from routes.chat import router as chat_router
+import models  # Ensures all ORM models are loaded
+from db import Base, _get_engine
 
 settings = get_settings()
 
@@ -13,6 +15,16 @@ app = FastAPI(
     description="RAG-based course assistant chatbot API",
     version="1.0.0",
 )
+
+
+@app.on_event("startup")
+def startup_event():
+    try:
+        engine, _ = _get_engine()
+        Base.metadata.create_all(bind=engine)
+        print("[Startup] Database tables created/verified successfully.")
+    except Exception as e:
+        print(f"[Startup Warning] Could not auto-create DB tables: {e}")
 
 # CORS — allow frontend origins
 allowed_origins = [o.strip().rstrip('/') for o in settings.cors_origins.split(",") if o.strip()]

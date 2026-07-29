@@ -254,12 +254,17 @@ class ChatService:
         user_message: str,
         top_k: int = 5
     ) -> List[Dict[str, Any]]:
-        db_chunks = (
-            db.query(DocumentChunk, Document.filename)
-            .join(Document, DocumentChunk.document_id == Document.id)
-            .filter(DocumentChunk.course_id == course_id)
-            .all()
-        )
+        try:
+            db_chunks = (
+                db.query(DocumentChunk, Document.filename)
+                .join(Document, DocumentChunk.document_id == Document.id)
+                .filter(DocumentChunk.course_id == course_id)
+                .all()
+            )
+        except Exception as err:
+            print(f"[DB Vector Query Warning] {err}")
+            db.rollback()
+            return []
 
         if not db_chunks:
             return []
