@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { courseApi, chatApi, API_BASE_URL } from '../services/api';
-import { MessageSquareText, Plus, Send, Sparkles, BookOpen, FileText, Trash2, ChevronRight, User, AlertCircle } from 'lucide-react';
+import { courseApi, chatApi, documentApi, API_BASE_URL } from '../services/api';
+import { MessageSquareText, Plus, Send, Sparkles, BookOpen, FileText, Trash2, ChevronRight, User, AlertCircle, Paperclip, Upload, Loader2, CheckCircle } from 'lucide-react';
 
 interface Source {
   document_id: string;
@@ -32,8 +32,11 @@ export const ChatPage: React.FC = () => {
   const [streamingText, setStreamingText] = useState('');
   const [streamingSources, setStreamingSources] = useState<Source[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -42,6 +45,40 @@ export const ChatPage: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingText]);
+
+  // Handle Direct Document Upload from Chat Page
+  const handleDirectUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    let targetCourseId = selectedCourseId;
+    if (!targetCourseId && courses.length > 0) {
+      targetCourseId = courses[0].id;
+      setSelectedCourseId(targetCourseId);
+    }
+
+    if (!targetCourseId) {
+      setError('Please select or enroll in a course before uploading a document.');
+      return;
+    }
+
+    setUploadingDoc(true);
+    setError(null);
+    setUploadSuccess(null);
+
+    try {
+      await documentApi.upload(targetCourseId, file);
+      setUploadSuccess(`Document "${file.name}" uploaded successfully! The AI Tutor is ready to answer questions about it.`);
+      setTimeout(() => setUploadSuccess(null), 7000);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      const formatted = typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map((d: any) => d.msg || 'Error').join('; ') : err.message || 'Failed to upload document.');
+      setError(formatted);
+    } finally {
+      setUploadingDoc(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // Fetch Courses
   useEffect(() => {
@@ -266,9 +303,23 @@ export const ChatPage: React.FC = () => {
         {/* New Chat Button */}
         <button
           onClick={handleNewSession}
-          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 transition-all mb-4"
+          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 transition-all mb-2"
         >
           <Plus className="w-4 h-4" /> New Chat Session
+        </button>
+
+        {/* Upload Document Quick Action */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadingDoc || !selectedCourseId}
+          className="w-full bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-medium py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-2 transition-all mb-4 disabled:opacity-50"
+        >
+          {uploadingDoc ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+          ) : (
+            <Upload className="w-3.5 h-3.5 text-indigo-400" />
+          )}
+          {uploadingDoc ? 'Uploading File...' : 'Upload Document'}
         </button>
 
         {/* Session History List */}
@@ -296,27 +347,40 @@ export const ChatPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Chat Panel */}
-      <div className="flex-1 glass-panel rounded-2xl border border-slate-800 flex flex-col overflow-hidden">
+      {/* Main Chat Area */}
+      <div className="flex-1 glass-panel rounded-2xl flex flex-col border border-slate-800 overflow-hidden">
         {/* Chat Header */}
-        <div className="px-6 py-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/40">
+        <div className="p-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-900/40">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-600/30">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white leading-tight">AI Course Tutor</h2>
-              <div className="flex items-center gap-1.5 text-xs text-indigo-400 mt-0.5">
-                <BookOpen className="w-3 h-3" /> Grounded in course documents
-              </div>
+              <h2 className="font-semibold text-white text-sm">AI Course Tutor</h2>
+              <p className="text-xs text-slate-400 flex items-center gap-1">
+                <BookOpen className="w-3 h-3 text-indigo-400" /> Grounded in course documents
+              </p>
             </div>
           </div>
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingDoc || !selectedCourseId}
+            className="px-3 py-1.5 rounded-xl bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/20 text-indigo-300 text-xs font-medium flex items-center gap-1.5 transition-all disabled:opacity-50"
+          >
+            {uploadingDoc ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+            ) : (
+              <Upload className="w-3.5 h-3.5 text-indigo-400" />
+            )}
+            Add Document
+          </button>
         </div>
 
-        {/* Messages Stream */}
+        {/* Messages List */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {messages.length === 0 && !isStreaming ? (
-            <div className="text-center py-16">
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
               <div className="w-16 h-16 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-4 glow-primary">
                 <Sparkles className="w-8 h-8" />
               </div>
@@ -424,18 +488,49 @@ export const ChatPage: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSendMessage} className="flex gap-3">
+          {uploadSuccess && (
+            <div className="mb-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span>{uploadSuccess}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSendMessage} className="flex gap-2.5 items-center">
+            {/* Hidden File Input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleDirectUpload}
+              accept=".pdf,.png,.jpg,.jpeg,.tiff"
+              className="hidden"
+            />
+
+            {/* Paperclip Document Upload Attachment Button */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingDoc || !selectedCourseId}
+              title="Upload course document (PDF / Images)"
+              className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-slate-400 hover:text-indigo-400 transition-all disabled:opacity-40 shrink-0 flex items-center justify-center"
+            >
+              {uploadingDoc ? (
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+              ) : (
+                <Paperclip className="w-4 h-4" />
+              )}
+            </button>
+
             <input
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Ask a question about your course materials..."
+              placeholder={uploadingDoc ? "Uploading document to course..." : "Ask a question about your course materials..."}
               className="flex-1 bg-slate-950/80 border border-slate-800 rounded-2xl px-5 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
             />
             <button
               type="submit"
               disabled={isStreaming || !inputMessage.trim()}
-              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium shadow-lg shadow-indigo-600/30 transition-all disabled:opacity-50 flex items-center justify-center"
+              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium shadow-lg shadow-indigo-600/30 transition-all disabled:opacity-50 flex items-center justify-center shrink-0"
             >
               <Send className="w-4 h-4" />
             </button>
