@@ -107,22 +107,13 @@ class ChatService:
 
         # Step 3: Embed Question & Query Vector DB / Pinecone
         question_embedding = self.embed_question(user_message)
-        chunks = pinecone_service.query(
-            embedding=question_embedding,
-            namespace=str(session.course_id),
-            top_k=5,
-            similarity_threshold=0.6
+        chunks = self._fetch_relevant_chunks(
+            db=db,
+            course_id=session.course_id,
+            question_embedding=question_embedding,
+            user_message=user_message,
+            top_k=5
         )
-
-        # Fallback to Database Vector Store if Pinecone returns no results
-        if not chunks:
-            chunks = self._query_db_vector_store(
-                db=db,
-                course_id=session.course_id,
-                question_embedding=question_embedding,
-                user_message=user_message,
-                top_k=5
-            )
 
         sources = []
         for chunk in chunks:
@@ -232,6 +223,32 @@ class ChatService:
 
         yield f'data: {json.dumps({"type": "sources", "sources": sources})}\n\n'
         yield f'data: {json.dumps({"type": "done", "message_id": str(assistant_msg.id)})}\n\n'
+
+    def _fetch_relevant_chunks(
+        self,
+        db: Session,
+        course_id: UUID,
+        question_embedding: List[float],
+        user_message: str,
+        top_k: int = 5
+    ) -> List[Dict[str, Any]]:
+        chunks = pinecone_service.query(
+            embedding=question_embedding,
+            namespace=str(course_id),
+            top_k=top_k,
+            similarity_threshold=0.6
+        )
+
+        if not chunks:
+            chunks = self._query_db_vector_store(
+                db=db,
+                course_id=course_id,
+                question_embedding=question_embedding,
+                user_message=user_message,
+                top_k=top_k
+            )
+
+        return chunks
 
     def _query_db_vector_store(
         self,

@@ -56,6 +56,18 @@ export const DocumentsPage: React.FC = () => {
     fetchDocuments();
   }, [selectedCourseId]);
 
+  // Auto-poll status when documents are processing or pending
+  useEffect(() => {
+    const isProcessing = documents.some((d) => d.status === 'processing' || d.status === 'pending');
+    if (isProcessing) {
+      const interval = setInterval(() => {
+        if (!selectedCourseId) return;
+        documentApi.list(selectedCourseId).then((data) => setDocuments(data)).catch(() => {});
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [documents, selectedCourseId]);
+
   const formatApiError = (err: any, defaultMsg: string = 'Failed to upload document.'): string => {
     const detail = err?.response?.data?.detail;
     if (typeof detail === 'string') return detail;

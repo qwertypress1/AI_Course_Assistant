@@ -230,10 +230,10 @@ class DocumentProcessingService:
                 text = page.extract_text() or ""
                 if self._is_scanned_page(text, page):
                     try:
-                        img = page.to_image(resolution=300)
+                        img = page.to_image(resolution=150)
                         pil_image = img.original
                         ocr_text = pytesseract.image_to_string(pil_image, lang="eng")
-                        pages_text.append(ocr_text)
+                        pages_text.append(ocr_text if len(ocr_text.strip()) > len(text.strip()) else text)
                     except Exception:
                         pages_text.append(text)
                 else:
@@ -242,14 +242,9 @@ class DocumentProcessingService:
 
     def _is_scanned_page(self, extracted_text: str, page) -> bool:
         text_length = len(extracted_text.strip())
-        if text_length < 50:
-            return True
-        page_area = float(page.width) * float(page.height)
-        if page_area == 0:
-            return True
-        approx_text_area = text_length * 96
-        ratio = approx_text_area / page_area
-        return ratio < 0.02
+        if text_length >= 10:
+            return False
+        return True
 
     def _extract_from_image(self, file_path: str) -> List[str]:
         image = Image.open(file_path)

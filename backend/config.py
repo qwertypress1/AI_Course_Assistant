@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     pinecone_index_name: str = "course-assistant-vectors"
 
     # CORS
-    cors_origins: str = "http://localhost:3000,http://localhost:5173,https://ai-course-assistant-architecture.vercel.app"
+    cors_origins: str = "http://localhost:3000"
 
     # App
     environment: str = "development"
