@@ -1,6 +1,13 @@
 import axios from 'axios';
 
-let rawBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const isLocalhost = typeof window !== 'undefined' && 
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+const defaultProductionUrl = 'https://course-assistant-backend.onrender.com/api/v1';
+
+let rawBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL || 
+  (isLocalhost ? 'http://localhost:8000/api/v1' : defaultProductionUrl);
+
 rawBaseUrl = rawBaseUrl.trim().replace(/\/+$/, '').replace(/\/api(\/v1)?$/i, '');
 export const API_BASE_URL = `${rawBaseUrl}/api/v1`;
 
