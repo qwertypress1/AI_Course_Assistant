@@ -12,16 +12,12 @@ from services.pinecone_service import pinecone_service
 
 settings = get_settings()
 
-SYSTEM_PROMPT = """You are the AI Course Assistant, a helpful academic tutor for university students.
+SYSTEM_PROMPT = """You are the AI Course Assistant, an intelligent academic tutor for university students.
 
-Your primary rule: You MUST answer user questions using ONLY the provided course document context below.
-
-STRICT RULES:
-1. Grounding: Answer strictly using facts directly mentioned in the Context. Do not make up information or use outside knowledge not supported by the context.
-2. Citations: At the end of key statements or paragraphs, cite the exact source document and page number in format: [Document: <filename>, Page: <page_number>].
-3. Refusal: If the provided Context does NOT contain enough information to answer the question, state explicitly:
-   "I don't have relevant information in your uploaded documents to answer this question. Please upload documents covering this topic or rephrase your question."
-4. Tone: Academic, clear, objective, and encouraging.
+GUIDELINES:
+1. When course document CONTEXT is provided below, prioritize answering using facts from the Context and append exact source citations in format: [Document: <filename>, Page: <page_number>].
+2. When NO document Context is provided (or when the Context does not cover the question), answer the user's question accurately using your general academic knowledge, and add a brief helpful note: *(Answered from AI academic knowledge. Upload course notes for grounded citations.)*
+3. Tone: Clear, academic, helpful, encouraging, and structured with clean markdown.
 """
 
 
@@ -144,28 +140,17 @@ class ChatService:
             yield f'data: {json.dumps({"type": "done", "message_id": str(assistant_msg.id)})}\n\n'
             return
 
-        if not chunks and not is_greeting:
-            fallback = (
-                "I don't have relevant information in your uploaded documents "
-                "to answer this question. Please try rephrasing your question "
-                "or upload course documents covering this topic."
-            )
-            assistant_msg = ChatMessage(session_id=session.id, role="assistant", content=fallback, sources=[], tokens_used=0, model_used="fallback")
-            db.add(assistant_msg)
-            db.commit()
-            yield f'data: {json.dumps({"type": "chunk", "content": fallback})}\n\n'
-            yield f'data: {json.dumps({"type": "sources", "sources": []})}\n\n'
-            yield f'data: {json.dumps({"type": "done", "message_id": str(assistant_msg.id)})}\n\n'
-            return
-
         # Step 5: Assemble Context Prompt
-        context_str = ""
-        for i, chunk in enumerate(chunks, 1):
-            meta = chunk.get("metadata", {})
-            fname = meta.get("filename", "Doc")
-            page = meta.get("page_number", 1)
-            preview = meta.get("text_preview", "")
-            context_str += f"\n--- [Source {i}: {fname}, Page {page}] ---\n{preview}\n"
+        if chunks:
+            context_str = ""
+            for i, chunk in enumerate(chunks, 1):
+                meta = chunk.get("metadata", {})
+                fname = meta.get("filename", "Doc")
+                page = meta.get("page_number", 1)
+                preview = meta.get("text_preview", "")
+                context_str += f"\n--- [Source {i}: {fname}, Page {page}] ---\n{preview}\n"
+        else:
+            context_str = "[No specific uploaded course document matched this query. Answer accurately from general academic knowledge and include a note at the end: *(Answered from AI academic knowledge. Upload relevant course materials for grounded citations.)*]"
 
         messages_for_llm = [{"role": "system", "content": f"{SYSTEM_PROMPT}\n\nCONTEXT:\n{context_str}"}]
         for h in history[:-1]:  # exclude the user message just added
