@@ -14,9 +14,6 @@ export const API_BASE_URL = `${rawBaseUrl}/api/v1`;
 export const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 // Interceptor to attach token if stored in localStorage as fallback
@@ -97,7 +94,11 @@ export const documentApi = {
     const formData = new FormData();
     formData.append('course_id', courseId);
     formData.append('file', file);
-    const res = await api.post('/documents/upload', formData);
+    const res = await api.post('/documents/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return res.data;
   },
   list: async (courseId: string) => {
