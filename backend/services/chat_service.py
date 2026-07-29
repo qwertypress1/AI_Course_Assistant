@@ -12,12 +12,16 @@ from services.pinecone_service import pinecone_service
 
 settings = get_settings()
 
-SYSTEM_PROMPT = """You are the AI Course Assistant, an intelligent academic tutor for university students.
+SYSTEM_PROMPT = """You are the AI Course Assistant, a helpful academic tutor for university students.
 
-GUIDELINES:
-1. When course document CONTEXT is provided below, prioritize answering using facts from the Context and append exact source citations in format: [Document: <filename>, Page: <page_number>].
-2. When NO document Context is provided (or when the Context does not cover the question), answer the user's question accurately using your general academic knowledge, and add a brief helpful note: *(Answered from AI academic knowledge. Upload course notes for grounded citations.)*
-3. Tone: Clear, academic, helpful, encouraging, and structured with clean markdown.
+Your primary rule: You MUST answer user questions using ONLY the provided course document context below.
+
+STRICT RULES:
+1. Grounding: Answer strictly using facts directly mentioned in the Context. Do not make up information or use outside knowledge not supported by the context.
+2. Citations: At the end of key statements or paragraphs, cite the exact source document and page number in format: [Document: <filename>, Page: <page_number>].
+3. Refusal: If the provided Context does NOT contain enough information to answer the question, state explicitly:
+   "I don't have relevant information in your uploaded documents to answer this question. Please upload documents covering this topic or rephrase your question."
+4. Tone: Academic, clear, objective, and encouraging.
 """
 
 
@@ -89,125 +93,132 @@ class ChatService:
     ) -> AsyncGenerator[str, None]:
         start_time = time.time()
 
-        # Step 1: Save User Message
-        user_msg_rec = ChatMessage(
-            session_id=session.id,
-            role="user",
-            content=user_message
-        )
-        db.add(user_msg_rec)
-        db.commit()
-
-        # Step 2: Retrieve Recent Chat History
-        history = self.get_messages(db, session.id, limit=10)
-
-        # Step 3: Embed Question & Query Vector DB / Pinecone
-        question_embedding = self.embed_question(user_message)
-        chunks = self._fetch_relevant_chunks(
-            db=db,
-            course_id=session.course_id,
-            question_embedding=question_embedding,
-            user_message=user_message,
-            top_k=5
-        )
-
-        sources = []
-        for chunk in chunks:
-            meta = chunk.get("metadata", {})
-            sources.append({
-                "document_id": meta.get("document_id"),
-                "filename": meta.get("filename", "Course Document"),
-                "page_number": meta.get("page_number", 1),
-                "chunk_id": chunk.get("id")
-            })
-
-        # Yield Initial Event
+        # Step 0: YIELD INITIAL EVENT IMMEDIATELY to establish SSE connection
         yield f'data: {json.dumps({"type": "start", "session_id": str(session.id)})}\n\n'
 
-        # Check if user message is a conversational greeting
-        clean_msg = user_message.strip().lower().rstrip('!?.,')
-        greetings = {'hi', 'hello', 'hey', 'hello what sup', 'whats up', 'what sup', 'good morning', 'good afternoon', 'good evening', 'who are you', 'help', 'yo'}
-        is_greeting = clean_msg in greetings
-
-        # Step 4: Handle cases with no OpenAI client or no chunks
-        if not self.openai_client:
-            fallback = "OpenAI API key is not configured on the server. Please contact system administrator."
-            assistant_msg = ChatMessage(session_id=session.id, role="assistant", content=fallback, sources=[], tokens_used=0, model_used="fallback")
-            db.add(assistant_msg)
-            db.commit()
-            yield f'data: {json.dumps({"type": "chunk", "content": fallback})}\n\n'
-            yield f'data: {json.dumps({"type": "sources", "sources": []})}\n\n'
-            yield f'data: {json.dumps({"type": "done", "message_id": str(assistant_msg.id)})}\n\n'
-            return
-
-        # Step 5: Assemble Context Prompt
-        if chunks:
-            context_str = ""
-            for i, chunk in enumerate(chunks, 1):
-                meta = chunk.get("metadata", {})
-                fname = meta.get("filename", "Doc")
-                page = meta.get("page_number", 1)
-                preview = meta.get("text_preview", "")
-                context_str += f"\n--- [Source {i}: {fname}, Page {page}] ---\n{preview}\n"
-        else:
-            context_str = "[No specific uploaded course document matched this query. Answer accurately from general academic knowledge and include a note at the end: *(Answered from AI academic knowledge. Upload relevant course materials for grounded citations.)*]"
-
-        messages_for_llm = [{"role": "system", "content": f"{SYSTEM_PROMPT}\n\nCONTEXT:\n{context_str}"}]
-        for h in history[:-1]:  # exclude the user message just added
-            messages_for_llm.append({"role": h.role, "content": h.content})
-        messages_for_llm.append({"role": "user", "content": user_message})
-
-        # Step 6: Stream Response from OpenAI
-        full_content = ""
         try:
-            stream = self.openai_client.chat.completions.create(
-                model=settings.openai_chat_model,
-                messages=messages_for_llm,
-                temperature=0.1,
-                top_p=0.9,
-                max_tokens=2048,
-                stream=True
+            # Step 1: Save User Message
+            user_msg_rec = ChatMessage(
+                session_id=session.id,
+                role="user",
+                content=user_message
+            )
+            db.add(user_msg_rec)
+            db.commit()
+
+            # Step 2: Retrieve Recent Chat History
+            history = self.get_messages(db, session.id, limit=10)
+
+            # Step 3: Embed Question & Query Vector DB / Pinecone
+            question_embedding = self.embed_question(user_message)
+            chunks = self._fetch_relevant_chunks(
+                db=db,
+                course_id=session.course_id,
+                question_embedding=question_embedding,
+                user_message=user_message,
+                top_k=5
             )
 
-            for chunk_res in stream:
-                if chunk_res.choices and chunk_res.choices[0].delta.content:
-                    delta = chunk_res.choices[0].delta.content
-                    full_content += delta
-                    yield f'data: {json.dumps({"type": "chunk", "content": delta})}\n\n'
+            sources = []
+            for chunk in chunks:
+                meta = chunk.get("metadata", {})
+                sources.append({
+                    "document_id": meta.get("document_id"),
+                    "filename": meta.get("filename", "Course Document"),
+                    "page_number": meta.get("page_number", 1),
+                    "chunk_id": chunk.get("id")
+                })
 
-        except Exception as e:
-            full_content = f"An error occurred while generating answer: {str(e)}"
-            yield f'data: {json.dumps({"type": "chunk", "content": full_content})}\n\n'
+            # Check if user message is a conversational greeting
+            clean_msg = user_message.strip().lower().rstrip('!?.,')
+            greetings = {'hi', 'hello', 'hey', 'hello what sup', 'whats up', 'what sup', 'good morning', 'good afternoon', 'good evening', 'who are you', 'help', 'yo'}
+            is_greeting = clean_msg in greetings
 
-        # Save assistant message to DB
-        assistant_msg = ChatMessage(
-            session_id=session.id,
-            role="assistant",
-            content=full_content,
-            sources=sources,
-            tokens_used=len(full_content) // 4,
-            model_used=settings.openai_chat_model
-        )
-        db.add(assistant_msg)
-        db.commit()
+            # Step 4: Check OpenAI client availability
+            if not self.openai_client:
+                fallback = "AI Chat Service Warning: OpenAI API key is not configured or is invalid. Please update OPENAI_API_KEY in server environment settings."
+                assistant_msg = ChatMessage(session_id=session.id, role="assistant", content=fallback, sources=[], tokens_used=0, model_used="fallback")
+                db.add(assistant_msg)
+                db.commit()
+                yield f'data: {json.dumps({"type": "chunk", "content": fallback})}\n\n'
+                yield f'data: {json.dumps({"type": "sources", "sources": []})}\n\n'
+                yield f'data: {json.dumps({"type": "done", "message_id": str(assistant_msg.id)})}\n\n'
+                return
 
-        # Log Usage
-        latency = int((time.time() - start_time) * 1000)
-        log = UsageLog(
-            user_id=session.user_id,
-            action="rag_chat_completion",
-            resource_type="chat_session",
-            resource_id=session.id,
-            tokens_input=len(str(messages_for_llm)) // 4,
-            tokens_output=len(full_content) // 4,
-            model_used=settings.openai_chat_model,
-            latency_ms=latency
-        )
-        db.add(log)
-        db.commit()
+            # Step 5: Assemble Context Prompt
+            if chunks:
+                context_str = ""
+                for i, chunk in enumerate(chunks, 1):
+                    meta = chunk.get("metadata", {})
+                    fname = meta.get("filename", "Doc")
+                    page = meta.get("page_number", 1)
+                    preview = meta.get("text_preview", "")
+                    context_str += f"\n--- [Source {i}: {fname}, Page {page}] ---\n{preview}\n"
+            else:
+                context_str = "[No specific uploaded course document matched this query. Answer accurately from general academic knowledge and include a note at the end: *(Answered from AI academic knowledge. Upload relevant course materials for grounded citations.)*]"
 
-        yield f'data: {json.dumps({"type": "sources", "sources": sources})}\n\n'
-        yield f'data: {json.dumps({"type": "done", "message_id": str(assistant_msg.id)})}\n\n'
+            messages_for_llm = [{"role": "system", "content": f"{SYSTEM_PROMPT}\n\nCONTEXT:\n{context_str}"}]
+            for h in history[:-1]:  # exclude the user message just added
+                messages_for_llm.append({"role": h.role, "content": h.content})
+            messages_for_llm.append({"role": "user", "content": user_message})
+
+            # Step 6: Stream Response from OpenAI
+            full_content = ""
+            try:
+                stream = self.openai_client.chat.completions.create(
+                    model=settings.openai_chat_model,
+                    messages=messages_for_llm,
+                    temperature=0.1,
+                    top_p=0.9,
+                    max_tokens=2048,
+                    stream=True
+                )
+
+                for chunk_res in stream:
+                    if chunk_res.choices and chunk_res.choices[0].delta.content:
+                        delta = chunk_res.choices[0].delta.content
+                        full_content += delta
+                        yield f'data: {json.dumps({"type": "chunk", "content": delta})}\n\n'
+
+            except Exception as e:
+                full_content = f"AI Generation Error: {str(e)}"
+                yield f'data: {json.dumps({"type": "chunk", "content": full_content})}\n\n'
+
+            # Save assistant message to DB
+            assistant_msg = ChatMessage(
+                session_id=session.id,
+                role="assistant",
+                content=full_content,
+                sources=sources,
+                tokens_used=len(full_content) // 4,
+                model_used=settings.openai_chat_model
+            )
+            db.add(assistant_msg)
+            db.commit()
+
+            # Log Usage
+            latency = int((time.time() - start_time) * 1000)
+            log = UsageLog(
+                user_id=session.user_id,
+                action="rag_chat_completion",
+                resource_type="chat_session",
+                resource_id=session.id,
+                tokens_input=len(str(messages_for_llm)) // 4,
+                tokens_output=len(full_content) // 4,
+                model_used=settings.openai_chat_model,
+                latency_ms=latency
+            )
+            db.add(log)
+            db.commit()
+
+            yield f'data: {json.dumps({"type": "sources", "sources": sources})}\n\n'
+            yield f'data: {json.dumps({"type": "done", "message_id": str(assistant_msg.id)})}\n\n'
+
+        except Exception as top_err:
+            error_msg = f"Chat Error: {str(top_err)}"
+            yield f'data: {json.dumps({"type": "chunk", "content": error_msg})}\n\n'
+            yield f'data: {json.dumps({"type": "sources", "sources": []})}\n\n'
+            yield f'data: {json.dumps({"type": "done", "message_id": "error"})}\n\n'
 
     def _fetch_relevant_chunks(
         self,
