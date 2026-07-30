@@ -19,7 +19,7 @@ class ChatMessageRequest(BaseModel):
 
 
 class CreateSessionRequest(BaseModel):
-    course_id: UUID
+    course_id: Optional[UUID] = None
     title: Optional[str] = "New Chat"
 
 
@@ -39,7 +39,7 @@ class MessageResponse(BaseModel):
 class SessionResponse(BaseModel):
     id: UUID
     user_id: UUID
-    course_id: UUID
+    course_id: Optional[UUID] = None
     title: str
     created_at: datetime
     updated_at: datetime

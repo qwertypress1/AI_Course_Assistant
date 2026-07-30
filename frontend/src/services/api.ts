@@ -16,10 +16,13 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+api.defaults.withCredentials = true;
+
 // Interceptor to attach token if stored in localStorage as fallback
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
-  if (token && config.headers) {
+  config.headers = config.headers || {};
+  if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -83,6 +86,10 @@ export const courseApi = {
     const res = await api.post(`/courses/${courseId}/enroll`, { course_id: courseId, role });
     return res.data;
   },
+  delete: async (courseId: string) => {
+    const res = await api.delete(`/courses/${courseId}`);
+    return res.data;
+  },
 };
 
 // Document API
@@ -117,8 +124,8 @@ export const documentApi = {
 
 // Chat API
 export const chatApi = {
-  createSession: async (courseId: string, title?: string) => {
-    const res = await api.post('/chat/sessions', { course_id: courseId, title });
+  createSession: async (courseId?: string, title?: string) => {
+    const res = await api.post('/chat/sessions', { course_id: courseId || null, title });
     return res.data;
   },
   listSessions: async (courseId?: string) => {

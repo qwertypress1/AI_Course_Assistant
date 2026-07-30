@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { courseApi } from '../services/api';
-import { BookOpen, Plus, FileText, AlertCircle, X, Search, ArrowUpRight, CheckCircle2, Sparkles, UserPlus } from 'lucide-react';
+import { BookOpen, Plus, FileText, AlertCircle, X, Search, ArrowUpRight, CheckCircle2, Sparkles, UserPlus, Trash2 } from 'lucide-react';
 
 export const CoursesPage: React.FC = () => {
   const { user } = useAuth();
@@ -42,6 +42,19 @@ export const CoursesPage: React.FC = () => {
   useEffect(() => {
     fetchCourses();
   }, []);
+
+  const handleDeleteCourse = async (e: React.MouseEvent, courseId: string, courseCode: string) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to remove/delete course "${courseCode}"?`)) return;
+    try {
+      await courseApi.delete(courseId);
+      await fetchCourses();
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map((d: any) => d.msg || 'Error').join('; ') : err?.message || 'Failed to remove course.');
+      alert(msg);
+    }
+  };
 
   const handleEnroll = async (courseId: string) => {
     try {
@@ -166,7 +179,16 @@ export const CoursesPage: React.FC = () => {
                     <span className="px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-bold font-mono">
                       {course.code}
                     </span>
-                    <span className="text-[11px] text-emerald-400 font-medium bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">Enrolled</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-emerald-400 font-medium bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">Enrolled</span>
+                      <button
+                        onClick={(e) => handleDeleteCourse(e, course.id, course.code)}
+                        className="p-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 transition-all"
+                        title="Delete / Unenroll Course"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                   <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors leading-snug">
                     {course.name}

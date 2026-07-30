@@ -86,9 +86,6 @@ export const ChatPage: React.FC = () => {
       try {
         const data = await courseApi.list();
         setCourses(data);
-        if (!selectedCourseId && data.length > 0) {
-          setSelectedCourseId(data[0].id);
-        }
       } catch (err) {
         console.error(err);
       }
@@ -96,14 +93,16 @@ export const ChatPage: React.FC = () => {
     fetchCourses();
   }, []);
 
-  // Fetch Sessions for Course
+  // Fetch Sessions for Course or General
   const fetchSessions = async () => {
-    if (!selectedCourseId) return;
     try {
-      const data = await chatApi.listSessions(selectedCourseId);
+      const courseParam = selectedCourseId ? selectedCourseId : 'general';
+      const data = await chatApi.listSessions(courseParam);
       setSessions(data);
-      if (data.length > 0 && !currentSessionId) {
+      if (data.length > 0) {
         setCurrentSessionId(data[0].id);
+      } else {
+        setCurrentSessionId(null);
       }
     } catch (err) {
       console.error(err);
@@ -133,14 +132,16 @@ export const ChatPage: React.FC = () => {
 
   // Create New Session
   const handleNewSession = async () => {
-    if (!selectedCourseId) return;
     try {
-      const newSession = await chatApi.createSession(selectedCourseId, 'New Chat Workspace');
+      const defaultTitle = selectedCourseId ? 'New Course Chat' : 'General AI Chat';
+      const newSession = await chatApi.createSession(selectedCourseId || undefined, defaultTitle);
       setSessions([newSession, ...sessions]);
       setCurrentSessionId(newSession.id);
       setMessages([]);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map((d: any) => d.msg || 'Error').join('; ') : err?.message || 'Failed to create chat session.');
+      setError(msg);
     }
   };
 
@@ -167,11 +168,17 @@ export const ChatPage: React.FC = () => {
 
     let activeSid = currentSessionId;
     if (!activeSid) {
-      if (!selectedCourseId) return;
-      const newSession = await chatApi.createSession(selectedCourseId, inputMessage.slice(0, 30));
-      setSessions([newSession, ...sessions]);
-      setCurrentSessionId(newSession.id);
-      activeSid = newSession.id;
+      try {
+        const newSession = await chatApi.createSession(selectedCourseId || undefined, inputMessage.slice(0, 30));
+        setSessions([newSession, ...sessions]);
+        setCurrentSessionId(newSession.id);
+        activeSid = newSession.id;
+      } catch (err: any) {
+        const detail = err?.response?.data?.detail;
+        const msg = typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map((d: any) => d.msg || 'Error').join('; ') : err?.message || 'Failed to create chat session.');
+        setError(msg);
+        return;
+      }
     }
 
     const userText = inputMessage.trim();
@@ -289,12 +296,16 @@ export const ChatPage: React.FC = () => {
           <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Select Course</label>
           <select
             value={selectedCourseId}
-            onChange={(e) => setSelectedCourseId(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+            onChange={(e) => {
+              setSelectedCourseId(e.target.value);
+              setCurrentSessionId(null);
+            }}
+            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-medium"
           >
+            <option value="">✨ General AI Assistant (All Topics)</option>
             {courses.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.code} — {c.name}
+                📚 {c.code} — {c.name}
               </option>
             ))}
           </select>
@@ -356,9 +367,19 @@ export const ChatPage: React.FC = () => {
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-semibold text-white text-sm">AI Course Tutor</h2>
+              <h2 className="font-semibold text-white text-sm">
+                {selectedCourseId ? 'AI Course Tutor' : 'General AI Assistant'}
+              </h2>
               <p className="text-xs text-slate-400 flex items-center gap-1">
-                <BookOpen className="w-3 h-3 text-indigo-400" /> Grounded in course documents
+                {selectedCourseId ? (
+                  <>
+                    <BookOpen className="w-3 h-3 text-indigo-400" /> Grounded in course documents
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3 h-3 text-indigo-400" /> Answers any question flexibly
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -384,9 +405,13 @@ export const ChatPage: React.FC = () => {
               <div className="w-16 h-16 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-4 glow-primary">
                 <Sparkles className="w-8 h-8" />
               </div>
-              <h3 className="text-lg font-bold text-white">Ask your course assistant</h3>
+              <h3 className="text-lg font-bold text-white">
+                {selectedCourseId ? 'Ask your course assistant' : 'Ask General AI Anything'}
+              </h3>
               <p className="text-xs text-slate-400 mt-1.5 max-w-md mx-auto">
-                Questions are answered strictly using facts extracted from your uploaded lecture notes and PDFs.
+                {selectedCourseId
+                  ? 'Questions are answered strictly using facts extracted from your uploaded lecture notes and PDFs.'
+                  : 'Ask any question about general academic topics, coding, writing, explanations, or general knowledge.'}
               </p>
             </div>
           ) : (
@@ -414,7 +439,11 @@ export const ChatPage: React.FC = () => {
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="mt-4 pt-3 border-t border-slate-800/80">
                       <div className="text-[11px] font-semibold text-indigo-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                        <FileText className="w-3 h-3" /> Grounded Source Citations
+                        {msg.sources.some(s => s.document_id === 'general-ai') ? (
+                          <><Sparkles className="w-3 h-3 text-indigo-400" /> AI Model Citation (ChatGPT Knowledge)</>
+                        ) : (
+                          <><FileText className="w-3 h-3 text-indigo-400" /> Grounded Source Citations</>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {msg.sources.map((src, sIdx) => (
@@ -424,7 +453,7 @@ export const ChatPage: React.FC = () => {
                           >
                             <span className="font-medium text-white">{src.filename}</span>
                             <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded-full font-mono">
-                              Page {src.page_number}
+                              {src.document_id === 'general-ai' ? src.page_number : `Page ${src.page_number}`}
                             </span>
                           </div>
                         ))}
@@ -455,7 +484,11 @@ export const ChatPage: React.FC = () => {
                 {streamingSources.length > 0 && (
                   <div className="mt-4 pt-3 border-t border-slate-800/80">
                     <div className="text-[11px] font-semibold text-indigo-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                      <FileText className="w-3 h-3" /> Grounded Source Citations
+                      {streamingSources.some(s => s.document_id === 'general-ai') ? (
+                        <><Sparkles className="w-3 h-3 text-indigo-400" /> AI Model Citation (ChatGPT Knowledge)</>
+                      ) : (
+                        <><FileText className="w-3 h-3 text-indigo-400" /> Grounded Source Citations</>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {streamingSources.map((src, sIdx) => (
@@ -465,7 +498,7 @@ export const ChatPage: React.FC = () => {
                         >
                           <span className="font-medium text-white">{src.filename}</span>
                           <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded-full font-mono">
-                            Page {src.page_number}
+                            {src.document_id === 'general-ai' ? src.page_number : `Page ${src.page_number}`}
                           </span>
                         </div>
                       ))}
@@ -524,7 +557,13 @@ export const ChatPage: React.FC = () => {
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder={uploadingDoc ? "Uploading document to course..." : "Ask a question about your course materials..."}
+              placeholder={
+                uploadingDoc
+                  ? "Uploading document to course..."
+                  : selectedCourseId
+                  ? "Ask a question about your course materials..."
+                  : "Ask any general question or topic..."
+              }
               className="flex-1 bg-slate-950/80 border border-slate-800 rounded-2xl px-5 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
             />
             <button

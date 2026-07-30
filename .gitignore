@@ -36,6 +36,7 @@ logs/
 tmp/
 temp/
 /tmp/
+*.db
 
 # Testing
 .coverage

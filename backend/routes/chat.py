@@ -19,22 +19,23 @@ async def create_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    course = get_course_by_id(db, body.course_id)
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+    if body.course_id:
+        course = get_course_by_id(db, body.course_id)
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
 
     session = chat_service.create_session(
         db=db,
         user_id=current_user.id,
         course_id=body.course_id,
-        title=body.title or "New Chat"
+        title=body.title or ("General AI Assistant" if not body.course_id else "New Chat")
     )
     return session
 
 
 @router.get("/sessions", response_model=List[SessionResponse])
 async def list_sessions(
-    course_id: Optional[UUID] = None,
+    course_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

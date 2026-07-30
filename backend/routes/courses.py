@@ -13,9 +13,11 @@ from services.course_service import (
     create_course as create_new_course,
     enroll_user,
     is_user_enrolled,
+    delete_or_unenroll_course,
 )
 
 router = APIRouter(prefix="/courses", tags=["Courses"])
+
 
 
 async def require_enrolled(course_id: UUID, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -89,3 +91,16 @@ async def enroll_student(
 
     enrollment = enroll_user(db, course_id, current_user.id, body.role)
     return {"message": "Successfully enrolled", "enrollment_id": str(enrollment.id)}
+
+
+@router.delete("/{course_id}", status_code=status.HTTP_200_OK)
+async def delete_course(
+    course_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    res = delete_or_unenroll_course(db, course_id, current_user)
+    if not res.get("success"):
+        raise HTTPException(status_code=404, detail=res.get("message"))
+    return res
+

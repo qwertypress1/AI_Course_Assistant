@@ -6,6 +6,7 @@ from routes.courses import router as courses_router
 from routes.documents import router as documents_router
 from routes.chat import router as chat_router
 import models  # Ensures all ORM models are loaded
+from sqlalchemy import text
 from db import Base, _get_engine
 
 settings = get_settings()
@@ -22,17 +23,27 @@ def startup_event():
     try:
         engine, _ = _get_engine()
         Base.metadata.create_all(bind=engine)
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE chat_sessions ALTER COLUMN course_id DROP NOT NULL;"))
+                conn.commit()
+        except Exception:
+            pass
         print("[Startup] Database tables created/verified successfully.")
     except Exception as e:
         print(f"[Startup Warning] Could not auto-create DB tables: {e}")
 
 # CORS — allow frontend origins
 allowed_origins = [o.strip().rstrip('/') for o in settings.cors_origins.split(",") if o.strip()]
-default_vercel_origins = [
+default_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
     "https://aicourse-assistant.vercel.app",
     "https://ai-course-assistant-architecture.vercel.app"
 ]
-for vo in default_vercel_origins:
+for vo in default_origins:
     if vo not in allowed_origins:
         allowed_origins.append(vo)
 

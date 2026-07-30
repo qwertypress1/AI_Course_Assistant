@@ -12,7 +12,18 @@ from services.pinecone_service import pinecone_service
 
 settings = get_settings()
 
-SYSTEM_PROMPT = """You are the AI Course Assistant, a helpful academic tutor for university students.
+GENERAL_SYSTEM_PROMPT = """You are an all-knowing, highly versatile AI Assistant powered by OpenAI ChatGPT.
+
+You have comprehensive expertise in every imaginable field: computer science, mathematics, literature, physics, medicine, philosophy, business, world history, creative writing, programming, problem-solving, and general trivia.
+
+INSTRUCTIONS:
+1. Universal Answer Capability: Answer ANY question asked by the user — no matter how broad, technical, creative, or complex — accurately, thoroughly, and accurately.
+2. High Quality: Provide step-by-step reasoning, clean code examples, bullet points, or structured explanations whenever helpful.
+3. Tone: Intelligent, clear, engaging, and supportive.
+4. Citation Source: Your answers draw directly from your core built-in AI knowledge base (OpenAI ChatGPT model).
+"""
+
+STRICT_RAG_SYSTEM_PROMPT = """You are the AI Course Assistant, a grounded academic tutor for university students.
 
 Your primary rule: You MUST answer user questions using ONLY the provided course document context below.
 
@@ -36,7 +47,7 @@ class ChatService:
                 self._openai_client = OpenAI(api_key=settings.openai_api_key)
         return self._openai_client
 
-    def create_session(self, db: Session, user_id: UUID, course_id: UUID, title: str = "New Chat") -> ChatSession:
+    def create_session(self, db: Session, user_id: UUID, course_id: Optional[UUID] = None, title: str = "New Chat") -> ChatSession:
         session = ChatSession(
             user_id=user_id,
             course_id=course_id,
@@ -47,10 +58,16 @@ class ChatService:
         db.refresh(session)
         return session
 
-    def list_sessions(self, db: Session, user_id: UUID, course_id: Optional[UUID] = None) -> List[ChatSession]:
+    def list_sessions(self, db: Session, user_id: UUID, course_id_param: Optional[Any] = None) -> List[ChatSession]:
         query = db.query(ChatSession).filter(ChatSession.user_id == user_id)
-        if course_id:
-            query = query.filter(ChatSession.course_id == course_id)
+        if course_id_param and str(course_id_param).lower() in ("general", "none", "null"):
+            query = query.filter(ChatSession.course_id.is_(None))
+        elif course_id_param:
+            try:
+                c_uuid = UUID(str(course_id_param))
+                query = query.filter(ChatSession.course_id == c_uuid)
+            except ValueError:
+                pass
         return query.order_by(ChatSession.updated_at.desc()).all()
 
     def get_session(self, db: Session, session_id: UUID) -> Optional[ChatSession]:
@@ -109,30 +126,35 @@ class ChatService:
             # Step 2: Retrieve Recent Chat History
             history = self.get_messages(db, session.id, limit=10)
 
-            # Step 3: Embed Question & Query Vector DB / Pinecone
-            question_embedding = self.embed_question(user_message)
-            chunks = self._fetch_relevant_chunks(
-                db=db,
-                course_id=session.course_id,
-                question_embedding=question_embedding,
-                user_message=user_message,
-                top_k=5
-            )
-
+            # Step 3: Check if this is a Course Chat vs General Chat
             sources = []
-            for chunk in chunks:
-                meta = chunk.get("metadata", {})
-                sources.append({
-                    "document_id": meta.get("document_id"),
-                    "filename": meta.get("filename", "Course Document"),
-                    "page_number": meta.get("page_number", 1),
-                    "chunk_id": chunk.get("id")
-                })
+            chunks = []
+            if session.course_id:
+                question_embedding = self.embed_question(user_message)
+                chunks = self._fetch_relevant_chunks(
+                    db=db,
+                    course_id=session.course_id,
+                    question_embedding=question_embedding,
+                    user_message=user_message,
+                    top_k=5
+                )
 
-            # Check if user message is a conversational greeting
-            clean_msg = user_message.strip().lower().rstrip('!?.,')
-            greetings = {'hi', 'hello', 'hey', 'hello what sup', 'whats up', 'what sup', 'good morning', 'good afternoon', 'good evening', 'who are you', 'help', 'yo'}
-            is_greeting = clean_msg in greetings
+                for chunk in chunks:
+                    meta = chunk.get("metadata", {})
+                    sources.append({
+                        "document_id": meta.get("document_id"),
+                        "filename": meta.get("filename", "Course Document"),
+                        "page_number": meta.get("page_number", 1),
+                        "chunk_id": chunk.get("id")
+                    })
+            else:
+                # General AI Assistant Mode: source from ChatGPT knowledge
+                sources = [{
+                    "document_id": "general-ai",
+                    "filename": f"General Knowledge Base ({settings.openai_chat_model.upper()})",
+                    "page_number": "ChatGPT Core Model",
+                    "chunk_id": "gpt-knowledge"
+                }]
 
             # Step 4: Check OpenAI client availability
             if not self.openai_client:
@@ -145,19 +167,24 @@ class ChatService:
                 yield f'data: {json.dumps({"type": "done", "message_id": str(assistant_msg.id)})}\n\n'
                 return
 
-            # Step 5: Assemble Context Prompt
-            if chunks:
-                context_str = ""
-                for i, chunk in enumerate(chunks, 1):
-                    meta = chunk.get("metadata", {})
-                    fname = meta.get("filename", "Doc")
-                    page = meta.get("page_number", 1)
-                    preview = meta.get("text_preview", "")
-                    context_str += f"\n--- [Source {i}: {fname}, Page {page}] ---\n{preview}\n"
-            else:
-                context_str = "[No specific uploaded course document matched this query. Answer accurately from general academic knowledge and include a note at the end: *(Answered from AI academic knowledge. Upload relevant course materials for grounded citations.)*]"
+            # Step 5: Assemble System & Context Prompt
+            if session.course_id:
+                if chunks:
+                    context_str = ""
+                    for i, chunk in enumerate(chunks, 1):
+                        meta = chunk.get("metadata", {})
+                        fname = meta.get("filename", "Doc")
+                        page = meta.get("page_number", 1)
+                        preview = meta.get("text_preview", "")
+                        context_str += f"\n--- [Source {i}: {fname}, Page {page}] ---\n{preview}\n"
+                else:
+                    context_str = "[No specific uploaded course document matched this query. Answer accurately from general academic knowledge and include a note at the end: *(Answered from AI academic knowledge. Upload relevant course materials for grounded citations.)*]"
 
-            messages_for_llm = [{"role": "system", "content": f"{SYSTEM_PROMPT}\n\nCONTEXT:\n{context_str}"}]
+                system_content = f"{STRICT_RAG_SYSTEM_PROMPT}\n\nCONTEXT:\n{context_str}"
+            else:
+                system_content = GENERAL_SYSTEM_PROMPT
+
+            messages_for_llm = [{"role": "system", "content": system_content}]
             for h in history[:-1]:  # exclude the user message just added
                 messages_for_llm.append({"role": h.role, "content": h.content})
             messages_for_llm.append({"role": "user", "content": user_message})
@@ -223,11 +250,13 @@ class ChatService:
     def _fetch_relevant_chunks(
         self,
         db: Session,
-        course_id: UUID,
+        course_id: Optional[UUID],
         question_embedding: List[float],
         user_message: str,
         top_k: int = 5
     ) -> List[Dict[str, Any]]:
+        if not course_id:
+            return []
         chunks = pinecone_service.query(
             embedding=question_embedding,
             namespace=str(course_id),

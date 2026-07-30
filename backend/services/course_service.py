@@ -1,7 +1,8 @@
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
-from models import Course, CourseEnrollment, User, UserRole
+from fastapi import HTTPException, status
+from models import Course, CourseEnrollment, User, UserRole, Document, DocumentChunk, ChatSession, ChatMessage
 from schemas.course import CreateCourseRequest, EnrollRequest
 
 
@@ -91,3 +92,48 @@ def is_user_enrolled(db: Session, course_id: UUID, user_id: UUID) -> bool:
         CourseEnrollment.user_id == user_id
     ).count()
     return count > 0
+
+
+def delete_or_unenroll_course(db: Session, course_id: UUID, current_user: User) -> dict:
+    course = get_course_by_id(db, course_id)
+    if not course:
+        return {"success": False, "message": "Course not found"}
+
+    try:
+        # 1. Remove enrollment for current user if enrolled
+        db.query(CourseEnrollment).filter(
+            CourseEnrollment.course_id == course_id,
+            CourseEnrollment.user_id == current_user.id
+        ).delete(synchronize_session=False)
+
+        # 2. If current user created the course or is admin, remove the course completely
+        if course.created_by == current_user.id or current_user.role == UserRole.admin:
+            # Delete all document chunks for course
+            db.query(DocumentChunk).filter(DocumentChunk.course_id == course_id).delete(synchronize_session=False)
+
+            # Delete all chat messages and chat sessions for course
+            session_ids = [s.id for s in db.query(ChatSession.id).filter(ChatSession.course_id == course_id).all()]
+            if session_ids:
+                db.query(ChatMessage).filter(ChatMessage.session_id.in_(session_ids)).delete(synchronize_session=False)
+                db.query(ChatSession).filter(ChatSession.course_id == course_id).delete(synchronize_session=False)
+
+            # Delete all documents for course
+            db.query(Document).filter(Document.course_id == course_id).delete(synchronize_session=False)
+
+            # Delete all remaining course enrollments
+            db.query(CourseEnrollment).filter(CourseEnrollment.course_id == course_id).delete(synchronize_session=False)
+
+            # Delete course record
+            db.delete(course)
+
+        db.commit()
+        return {"success": True, "message": "Course removed successfully"}
+    except Exception as err:
+        db.rollback()
+        print(f"[Delete Course Error] {err}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not remove course: {str(err)}"
+        )
+
+
