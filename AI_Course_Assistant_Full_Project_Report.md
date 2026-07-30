@@ -1,5 +1,19 @@
 ﻿KWASU
 
+# ABSTRACT
+
+The increasing adoption of digital learning materials in Nigerian tertiary institutions has created a pressing need for intelligent systems that can help students navigate and comprehend course content outside the traditional classroom setting. Lecturers frequently face repetitive questions about material already covered in lecture notes, while students often struggle to find specific information within large PDF documents. Existing educational chatbots, such as ChatGPT, Khan Academy's AI tutor, and rule-based campus assistants, lack the ability to answer questions exclusively from course-specific materials with verifiable source citations, limiting their reliability for academic use.
+
+This project presents the design and implementation of an AI Course Assistant Chatbot, a Retrieval-Augmented Generation (RAG) system that enables students to upload course documents in PDF format and ask questions, receiving answers grounded exclusively in those materials with source-attributed citations. The system combines a hybrid Optical Character Recognition (OCR) pipeline — using pdfplumber for native PDF text extraction and Tesseract OCR for scanned documents, selected through a text-density heuristic — with semantic chunking via tiktoken, vector embedding via OpenAI's text-embedding-3-small model, vector storage and similarity search via Pinecone, and answer generation via OpenAI's GPT-4o-mini language model. The architecture follows a three-tier client-server pattern: a React 18 frontend deployed on Vercel, a FastAPI Python backend deployed on Render, and a PostgreSQL database managed through Supabase.
+
+The system was developed using the Object-Oriented Analysis and Design Methodology (OOADM) augmented with the Waterfall lifecycle model. The implementation encompasses six major subsystems: user authentication and role-based access control (Student, Instructor, Admin) with JWT-based httpOnly cookie authentication, a document processing pipeline that validates, extracts, cleans, chunks, embeds, and indexes uploaded PDFs, a RAG chat system that retrieves semantically relevant content and streams LLM responses via Server-Sent Events, a responsive single-page application with drag-and-drop upload and real-time streaming chat, a PostgreSQL database with strategic indexing and Row-Level Security policies, and a deployment pipeline using Docker, GitHub Actions, and managed cloud services.
+
+Testing employed a four-level strategy: unit testing (15 tests covering services and utilities), integration testing (10 tests covering API endpoints and database operations), system testing (16 end-to-end scenarios simulating real user workflows), and User Acceptance Testing with five users across three roles. Results demonstrated an average end-to-end query latency of 2.1 seconds to first token and 4.8 seconds for complete responses on digital PDFs, an OCR accuracy of over 95% for typed text and approximately 70% for handwritten content, a Mean Reciprocal Rank (MRR) of 0.88 for document retrieval, and a User Acceptance Testing satisfaction score of 4.2 out of 5. All five research objectives were successfully achieved.
+
+The AI Course Assistant Chatbot demonstrates that a RAG-based architecture, when properly designed with course-isolated vector namespaces, hybrid document processing, and strict source grounding, can provide accurate, context-aware academic assistance. The system offers a practical, deployable solution for Nigerian universities seeking to enhance students' access to course content through conversational AI.
+
+**Keywords:** Retrieval-Augmented Generation, Chatbot, Optical Character Recognition, Natural Language Processing, Educational Technology, Artificial Intelligence, Course Assistant, Pinecone Vector Database, OpenAI, FastAPI
+
 # TABLE OF CONTENTS
 
 **CHAPTER ONE: INTRODUCTION**

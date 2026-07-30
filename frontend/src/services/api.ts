@@ -21,8 +21,7 @@ api.defaults.withCredentials = true;
 // Interceptor to attach token if stored in localStorage as fallback
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
-  config.headers = config.headers || {};
-  if (token) {
+  if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
