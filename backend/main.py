@@ -26,6 +26,13 @@ def startup_event():
         try:
             with engine.connect() as conn:
                 conn.execute(text("ALTER TABLE chat_sessions ALTER COLUMN course_id DROP NOT NULL;"))
+                # Enable RLS on all public tables for Supabase Security Advisor compliance
+                tables = ["users", "courses", "course_enrollments", "documents", "document_chunks", "chat_sessions", "chat_messages", "usage_logs"]
+                for t in tables:
+                    try:
+                        conn.execute(text(f"ALTER TABLE public.{t} ENABLE ROW LEVEL SECURITY;"))
+                    except Exception:
+                        pass
                 conn.commit()
         except Exception:
             pass
